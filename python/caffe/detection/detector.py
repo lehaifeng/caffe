@@ -322,6 +322,25 @@ def compute_feats(images_df):
   return images_df
 
 
+def compute_gradients(img, classes, net):
+    """
+    Input:
+        img from format_image()
+        classes w.r.t. which the gradients are computed
+        net to compute gradients in
+
+    Output:
+        image of pixel-wise gradients
+    """
+    # classes = np.array([281], dtype=np.float32).reshape(1,1,1,1)
+    input_blobs = [np.ascontiguousarray([img], dtype=np.float32), classes]
+    net.Forward(input_blobs, [])
+    gradient = [np.empty((1, 3, 227, 227), dtype=np.float32),
+                np.empty((1, 1, 1, 1), dtype=np.float32)]
+    net.Backward([], gradient)
+    return gradient[0][0]
+
+
 def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
   global IMAGE_DIM, CROPPED_DIM, IMAGE_CENTER, IMAGE_MEAN, CROPPED_IMAGE_MEAN
   global NET, BATCH_SIZE, NUM_OUTPUT
@@ -342,7 +361,6 @@ def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
 
     # Load the data set mean file
   IMAGE_MEAN = np.load(image_mean_file)
-
   CROPPED_IMAGE_MEAN = IMAGE_MEAN[IMAGE_CENTER:IMAGE_CENTER + CROPPED_DIM,
                                   IMAGE_CENTER:IMAGE_CENTER + CROPPED_DIM,
                                   :]
