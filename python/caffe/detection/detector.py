@@ -308,58 +308,49 @@ def assemble_batches(inputs, crop_mode='center_only'):
   return df_batches
 
 
-def compute_feats(images_df):
-  input_blobs = [np.ascontiguousarray(
-    np.concatenate(images_df['image'].values), dtype='float32')]
-  output_blobs = [np.empty((BATCH_SIZE, NUM_OUTPUT, 1, 1), dtype=np.float32)]
-
-  NET.Forward(input_blobs, output_blobs)
-  feats = [output_blobs[0][i].flatten() for i in range(len(output_blobs[0]))]
-
-  # Add the features and delete the images.
-  del images_df['image']
-  images_df['feat'] = feats
-  return images_df
-
-
-def compute_feats_grads(img, classifier=None, localizer=None):
+def compute_feats_grads(input_df, classifier=None, localizer=None):
   '''
   Input:
-    img from format_image()
+    input_df pd data frame
     classifier test mode CaffeNet to predict imagenet 1k
     localizer train mode CaffeNet to backprop piwelwise gradients
 
   Output:
-    dictionary of
-    feat class probabilities
-    grad pixelwise gradients w.r.t. top activation
+    pd data frame
     predict index of top class
+    prob class probabilities
+    grad pixelwise gradients w.r.t. top activation (summed over channels)
   '''
-  # single image batch, imagenet 1k classes output
-  num_input = 1
-  im_arr = np.ascontiguousarray([img], dtype=np.float32)
-  im_dims = (num_input, 3, IMAGE_DIM, IMAGE_DIM)
+  data_arr = np.ascontiguousarray(np.concatenate(input_df['image'].values),
+                                  dtype=np.float32)
+  data_dims = data_arr.shape
+  num_input = data_dims[0]
 
-  # classify by forward pass in classifier net
-  input_blobs = [im_arr]
+  # classify by forward pass in classifier net for class probabilities
+  input_blobs = [data_arr]
   output_blobs = [np.empty((num_input, NUM_OUTPUT, 1, 1), dtype=np.float32)]
   classifier.Forward(input_blobs, output_blobs)
-  feats = output_blobs[0].flatten()
+  probs = [output.flatten() for output in output_blobs[0]]
 
-  # find top class activation
-  top_class = np.argmax(feats)  # todo handle ties (pick most frequent class?)
+  # find top class predictions
+  # TODO handle ties (pick most frequent class?)
+  predicts = [np.argmax(p) for p in probs]
 
   # localize by pixelwise gradients w.r.t. top activation
   # by forward-backward pass in localizer net
-  input_blobs = [im_arr,
-                 np.array([top_class], dtype=np.float32).reshape(1, 1, 1, 1)]
+  input_blobs = [data_arr,
+                 np.array([predicts], dtype=np.float32).reshape(10, 1, 1, 1)]
   localizer.Forward(input_blobs, [])
-  gradients = [np.empty(im_dims, dtype=np.float32),
-               np.empty((1, 1, 1, 1), dtype=np.float32)]
+  gradients = [np.empty(data_dims, dtype=np.float32),
+               np.empty((10, 1, 1, 1), dtype=np.float32)]
   localizer.Backward([], gradients)
-  gradients = gradients[0][0]
+  gradients = [gradients[0][i].sum(0) for i in range(len(gradients[0]))]
 
-  return {'feat': feats, 'grad': gradients, 'predict': top_class}
+  del input_df['image']
+  input_df['predict'] = predicts
+  input_df['prob'] = probs
+  input_df['grad'] = gradients
+  return input_df
 
 
 def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
@@ -469,7 +460,7 @@ if __name__ == "__main__":
     if i % 10 == 0:
       print('...on batch {}/{}, elapsed time: {:.3f} s'.format(
         i, len(image_batches), time.time() - t))
-    dfs_with_feats.append(compute_feats(image_batches[i]))
+    dfs_with_feats.append(compute_feats_grads(image_batches[i]))
 
   # Concatenate, droppping the padding rows.
   df = pd.concat(dfs_with_feats).dropna(subset=['filename'])
