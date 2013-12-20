@@ -322,25 +322,6 @@ def compute_feats(images_df):
   return images_df
 
 
-def compute_gradients(img, classes, net):
-    """
-    Input:
-        img from format_image()
-        classes w.r.t. which the gradients are computed
-        net to compute gradients in
-
-    Output:
-        image of pixel-wise gradients
-    """
-    # classes = np.array([281], dtype=np.float32).reshape(1,1,1,1)
-    input_blobs = [np.ascontiguousarray([img], dtype=np.float32), classes]
-    net.Forward(input_blobs, [])
-    gradient = [np.empty((1, 3, 227, 227), dtype=np.float32),
-                np.empty((1, 1, 1, 1), dtype=np.float32)]
-    net.Backward([], gradient)
-    return gradient[0][0]
-
-
 def compute_feats_grads(img, classifier=None, localizer=None):
   '''
   Input:
