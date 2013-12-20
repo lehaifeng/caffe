@@ -341,6 +341,46 @@ def compute_gradients(img, classes, net):
     return gradient[0][0]
 
 
+def compute_feats_grads(img, classifier=None, localizer=None):
+  '''
+  Input:
+    img from format_image()
+    classifier test mode CaffeNet to predict imagenet 1k
+    localizer train mode CaffeNet to backprop piwelwise gradients
+
+  Output:
+    dictionary of
+    feat class probabilities
+    grad pixelwise gradients w.r.t. top activation
+    predict index of top class
+  '''
+  # single image batch, imagenet 1k classes output
+  num_input = 1
+  im_arr = np.ascontiguousarray([img], dtype=np.float32)
+  im_dims = (num_input, 3, IMAGE_DIM, IMAGE_DIM)
+
+  # classify by forward pass in classifier net
+  input_blobs = [im_arr]
+  output_blobs = [np.empty((num_input, NUM_OUTPUT, 1, 1), dtype=np.float32)]
+  classifier.Forward(input_blobs, output_blobs)
+  feats = output_blobs[0].flatten()
+
+  # find top class activation
+  top_class = np.argmax(feats)  # todo handle ties (pick most frequent class?)
+
+  # localize by pixelwise gradients w.r.t. top activation
+  # by forward-backward pass in localizer net
+  input_blobs = [im_arr,
+                 np.array([top_class], dtype=np.float32).reshape(1, 1, 1, 1)]
+  localizer.Forward(input_blobs, [])
+  gradients = [np.empty(im_dims, dtype=np.float32),
+               np.empty((1, 1, 1, 1), dtype=np.float32)]
+  localizer.Backward([], gradients)
+  gradients = gradients[0][0]
+
+  return {'feat': feats, 'grad': gradients, 'predict': top_class}
+
+
 def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
   global IMAGE_DIM, CROPPED_DIM, IMAGE_CENTER, IMAGE_MEAN, CROPPED_IMAGE_MEAN
   global NET, BATCH_SIZE, NUM_OUTPUT
