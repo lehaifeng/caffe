@@ -27,7 +27,8 @@ import skimage.transform
 import selective_search_ijcv_with_python as selective_search
 import caffe
 
-NET = None
+CLASSIFY_NET = None
+LOCALIZE_NET = None
 
 IMAGE_DIM = None
 CROPPED_DIM = None
@@ -308,12 +309,10 @@ def assemble_batches(inputs, crop_mode='center_only'):
   return df_batches
 
 
-def compute_feats_grads(input_df, classifier=None, localizer=None):
+def compute_feats_grads(input_df):
   '''
   Input:
     input_df pd data frame
-    classifier test mode CaffeNet to predict imagenet 1k
-    localizer train mode CaffeNet to backprop piwelwise gradients
 
   Output:
     pd data frame
@@ -329,7 +328,7 @@ def compute_feats_grads(input_df, classifier=None, localizer=None):
   # classify by forward pass in classifier net for class probabilities
   input_blobs = [data_arr]
   output_blobs = [np.empty((num_input, NUM_OUTPUT, 1, 1), dtype=np.float32)]
-  classifier.Forward(input_blobs, output_blobs)
+  CLASSIFY_NET.Forward(input_blobs, output_blobs)
   probs = [output.flatten() for output in output_blobs[0]]
 
   # find top class predictions
@@ -338,37 +337,55 @@ def compute_feats_grads(input_df, classifier=None, localizer=None):
 
   # localize by pixelwise gradients w.r.t. top activation
   # by forward-backward pass in localizer net
-  input_blobs = [data_arr,
-                 np.array([predicts], dtype=np.float32).reshape(10, 1, 1, 1)]
-  localizer.Forward(input_blobs, [])
-  gradients = [np.empty(data_dims, dtype=np.float32),
-               np.empty((10, 1, 1, 1), dtype=np.float32)]
-  localizer.Backward([], gradients)
-  gradients = [gradients[0][i].sum(0) for i in range(len(gradients[0]))]
+  if LOCALIZE_NET:
+    input_blobs = [data_arr,
+                   np.array([predicts], dtype=np.float32).reshape(10, 1, 1, 1)]
+    LOCALIZE_NET.Forward(input_blobs, [])
+    gradients = [np.empty(data_dims, dtype=np.float32),
+                 np.empty((10, 1, 1, 1), dtype=np.float32)]
+    LOCALIZE_NET.Backward([], gradients)
+    gradients = [gradients[0][i].sum(0) for i in range(len(gradients[0]))]
+    input_df['grad'] = gradients
 
   del input_df['image']
   input_df['predict'] = predicts
   input_df['prob'] = probs
-  input_df['grad'] = gradients
   return input_df
 
 
-def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
+def config(classify_def, pretrained_model, localize_def=None, gpu=False,
+           image_dim=None, image_mean_file=None):
   global IMAGE_DIM, CROPPED_DIM, IMAGE_CENTER, IMAGE_MEAN, CROPPED_IMAGE_MEAN
-  global NET, BATCH_SIZE, NUM_OUTPUT
+  global CLASSIFY_NET, LOCALIZE_NET, BATCH_SIZE, NUM_OUTPUT
+
+  if not image_dim or not image_mean_file:
+    raise Exception("Configuration needs images' dimensions (image_dim) and "
+                    "image data mean file (images_mean_file)")
 
   # Initialize network by loading model definition and weights.
   t = time.time()
-  print("Loading Caffe model.")
-  NET = caffe.CaffeNet(model_def, pretrained_model)
-  NET.set_phase_test()
+  print("Loading Caffe classification model.")
+  CLASSIFY_NET = caffe.CaffeNet(classify_def, pretrained_model)
+  CLASSIFY_NET.set_phase_test()
   if gpu:
-    NET.set_mode_gpu()
-  print("Caffe model loaded in {:.3f} s".format(time.time() - t))
+    CLASSIFY_NET.set_mode_gpu()
+  print("Caffe classification model loaded in {:.3f}s".format(time.time() - t))
+
+  if localize_def:
+    t = time.time()
+    print("Loading Caffe localization model.")
+    LOCALIZE_NET = caffe.CaffeNet(localize_def, pretrained_model)
+    LOCALIZE_NET.set_phase_train()
+    if gpu:
+      LOCALIZE_NET.set_mode_gpu()
+    print("Caffe localization model loaded in {:.3f}s".format(time.time() - t))
+  else:
+    LOCALIZE_NET = None
+    print("Not loading a Caffe localization model.")
 
   # Configure for input/output data
   IMAGE_DIM = image_dim
-  CROPPED_DIM = NET.blobs()[0].width
+  CROPPED_DIM = CLASSIFY_NET.blobs()[0].width
   IMAGE_CENTER = int((IMAGE_DIM - CROPPED_DIM) / 2)
 
     # Load the data set mean file
@@ -376,12 +393,34 @@ def config(model_def, pretrained_model, gpu, image_dim, image_mean_file):
   CROPPED_IMAGE_MEAN = IMAGE_MEAN[IMAGE_CENTER:IMAGE_CENTER + CROPPED_DIM,
                                   IMAGE_CENTER:IMAGE_CENTER + CROPPED_DIM,
                                   :]
-  BATCH_SIZE = NET.blobs()[0].num  # network batch size
-  NUM_OUTPUT = NET.blobs()[-1].channels  # number of output classes
+  BATCH_SIZE = CLASSIFY_NET.blobs()[0].num  # network batch size
+  NUM_OUTPUT = CLASSIFY_NET.blobs()[-1].channels  # number of output classes
 
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
+  gflags.DEFINE_string(
+    "classify_def", "", "Classification model definition file.")
+  gflags.DEFINE_string(
+    "localize_def", "", "Gradient/localization model definition file.")
+  gflags.DEFINE_string(
+    "pretrained_model", "", "Pretrained model weights file.")
+  gflags.DEFINE_boolean(
+    "gpu", False, "Switch for gpu computation.")
+  gflags.DEFINE_string(
+    "crop_mode", "center_only", "Crop mode, from {}".format(CROP_MODES))
+  gflags.DEFINE_string(
+    "images_file", "", "Image filenames file.")
+  gflags.DEFINE_string(
+    "output_file", "", "Output DataFrame HDF5 filename.")
+  gflags.DEFINE_string(
+    "images_dim", 256, "Canonical dimension of (square) images.")
+  gflags.DEFINE_string(
+    "images_mean_file",
+    os.path.join(os.path.dirname(__file__), '../imagenet/ilsvrc_2012_mean.npy'),
+    "Data set image mean (numpy array).")
+  FLAGS = gflags.FLAGS
+  FLAGS(sys.argv)
 
   # Required arguments: input and output.
   parser.add_argument(
@@ -430,9 +469,9 @@ if __name__ == "__main__":
 
   args = parser.parse_args()
 
-  # Configure network, input, output.
-  config(args.model_def, args.pretrained_model, args.gpu, args.images_dim,
-         args.images_mean_file)
+  # Configure network, input, output
+  config(args.classify_def, args.pretrained_model, args.localize_def,
+         args.gpu, args.images_dim, args.images_mean_file)
 
   # Load input.
   t = time.time()
