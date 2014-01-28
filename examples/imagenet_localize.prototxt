@@ -3,11 +3,6 @@ input_dim: 10
 input_dim: 3
 input_dim: 227
 input_dim: 227
-input: "label"
-input_dim: 10
-input_dim: 1
-input_dim: 1
-input_dim: 1
 force_backward: true
 layers {
   layer {
@@ -350,12 +345,4 @@ layers {
   }
   bottom: "fc7"
   top: "fc8"
-}
-layers {
-  layer {
-    name: "loss"
-    type: "softmax_loss"
-  }
-  bottom: "fc8"
-  bottom: "label"
 }

@@ -337,22 +337,20 @@ def compute_feats_grads(input_df):
   # localize by pixelwise gradients w.r.t. top activation (or given classes)
   # by forward-backward pass in localizer net
   if LOCALIZE_NET:
+    LOCALIZE_NET.Forward(input_blobs, output_blobs)
     if 'grad_classes' in input_df.columns and input_df['grad_classes']:
       grad_classes = input_df['grad_classes']
     else:
       grad_classes = [predicts]
     gradients = np.empty((len(grad_classes),) + data_dims, dtype=np.float32)
     for i, class_ in enumerate(grad_classes):
-      # TODO there must be a way to run a single forward pass,
-      # then a backward pass per setting of the loss
-      input_blobs = [data_arr,
-                    np.array([class_], dtype=np.float32).reshape(10, 1, 1, 1)]
-      LOCALIZE_NET.Forward(input_blobs, [])
-      class_gradients = [np.empty(data_dims, dtype=np.float32),
-                        np.empty((BATCH_SIZE, 1, 1, 1), dtype=np.float32)]
-      LOCALIZE_NET.Backward([], class_gradients)
+      loss_gradients = [np.zeros((BATCH_SIZE, NUM_OUTPUT, 1, 1),
+                                 dtype=np.float32)]
+      loss_gradients[0][range(BATCH_SIZE), class_] = 1
+      class_gradients = [np.empty(data_dims, dtype=np.float32)]
+      LOCALIZE_NET.Backward(loss_gradients, class_gradients)
       gradients[i] = class_gradients[0]
-    input_df['grad'] = [im_grad for im_grad in gradients.swapaxes(0,1)]
+    input_df['grad'] = [im_grad for im_grad in gradients.swapaxes(0, 1)]
 
   del input_df['image']
   input_df['predict'] = predicts
