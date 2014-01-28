@@ -323,11 +323,10 @@ def compute_feats_grads(input_df):
   data_arr = np.ascontiguousarray(np.concatenate(input_df['image'].values),
                                   dtype=np.float32)
   data_dims = data_arr.shape
-  num_input = data_dims[0]
 
   # classify by forward pass in classifier net for class probabilities
   input_blobs = [data_arr]
-  output_blobs = [np.empty((num_input, NUM_OUTPUT, 1, 1), dtype=np.float32)]
+  output_blobs = [np.empty((BATCH_SIZE, NUM_OUTPUT, 1, 1), dtype=np.float32)]
   CLASSIFY_NET.Forward(input_blobs, output_blobs)
   probs = [output.flatten() for output in output_blobs[0]]
 
@@ -342,7 +341,7 @@ def compute_feats_grads(input_df):
                    np.array([predicts], dtype=np.float32).reshape(10, 1, 1, 1)]
     LOCALIZE_NET.Forward(input_blobs, [])
     gradients = [np.empty(data_dims, dtype=np.float32),
-                 np.empty((10, 1, 1, 1), dtype=np.float32)]
+                 np.empty((BATCH_SIZE, 1, 1, 1), dtype=np.float32)]
     LOCALIZE_NET.Backward([], gradients)
     gradients = [gradients[0][i].sum(0) for i in range(len(gradients[0]))]
     input_df['grad'] = gradients
