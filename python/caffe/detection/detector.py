@@ -42,6 +42,7 @@ NUM_OUTPUT = None
 
 CROP_MODES = ['list', 'center_only', 'corners', 'selective_search']
 
+COORD_COLS = ['ymin', 'xmin', 'ymax', 'xmax']
 
 def load_image(filename):
   """
@@ -125,9 +126,8 @@ def _assemble_images_list(input_df):
       with 'image', 'window', 'filename' columns
   """
   # unpack sequence of (image filename, windows)
-  coords = ['ymin', 'xmin', 'ymax', 'xmax']
   image_windows = (
-    (ix, input_df.iloc[np.where(input_df.index == ix)][coords].values)
+    (ix, input_df.iloc[np.where(input_df.index == ix)][COORD_COLS].values)
     for ix in input_df.index.unique()
   )
 
@@ -441,9 +441,8 @@ if __name__ == "__main__":
   print("Processing complete after {:.3f} s.".format(time.time() - t))
 
   # Label coordinates
-  coord_cols = ['ymin', 'xmin', 'ymax', 'xmax']
-  df[coord_cols] = pd.DataFrame(
-    data=np.vstack(df['window']), index=df.index, columns=coord_cols)
+  df[COORD_COLS] = pd.DataFrame(
+    data=np.vstack(df['window']), index=df.index, columns=COORD_COLS)
   del(df['window'])
 
   # Write out the results.
@@ -453,7 +452,7 @@ if __name__ == "__main__":
     class_cols = ['class{}'.format(x) for x in range(NUM_OUTPUT)]
     df[class_cols] = pd.DataFrame(
       data=np.vstack(df['feat']), index=df.index, columns=class_cols)
-    df.to_csv(args.output_file, cols=coord_cols + class_cols)
+    df.to_csv(args.output_file, cols=COORD_COLS + class_cols)
   else:
     df.to_hdf(args.output_file, 'df', mode='w')
   print("Done. Saving to {} took {:.3f} s.".format(
