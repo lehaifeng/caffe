@@ -113,6 +113,40 @@ def _image_coordinates(dims, window):
   return image_window.round().astype(int)
 
 
+def _assemble_images_raw(input_df):
+  """
+  For each patch, format + warp for Caffe
+
+  Input:
+    input_df: pandas.DataFrame
+      with 'patch', 'filename', 'ymin', 'xmin', 'ymax', 'xmax' columns
+
+  Output:
+    images_df: pandas.DataFrame
+      with 'image', 'window', 'filename' columns
+  """
+  # unpack sequence of (image filename, windows, patches)
+  image_windows_patches = (
+    (ix,
+     input_df.iloc[np.where(input_df.index == ix)][COORD_COLS].values,
+     input_df.iloc[np.where(input_df.index == ix)]['patch'].values)
+    for ix in input_df.index.unique()
+  )
+
+  # format and warp
+  data = []
+  for image_fname, windows, patches in image_windows_patches:
+    for window, raw_patch in zip(windows, patches):
+      data.append({
+        'image': raw_patch[np.newaxis, :],
+        'window': window,
+        'filename': image_fname
+      })
+
+  images_df = pd.DataFrame(data)
+  return images_df
+
+
 def _assemble_images_list(input_df):
   """
   For each image, collect the crops for the given windows.
@@ -257,7 +291,8 @@ def assemble_batches(inputs, crop_mode='center_only'):
     inputs: list of filenames (center_only, corners, and selective_search mode)
       OR input DataFrame (list mode)
     mode: string
-      'list': take the image windows from the input as-is
+      'list': take the image windows from the input as listed
+      'raw': take raw patches and format for Caffe
       'center_only': take the CROPPED_DIM middle of the image windows
       'corners': take CROPPED_DIM-sized boxes at 4 corners and center of
         the image windows, as well as their flipped versions: a total of 10.
@@ -277,6 +312,9 @@ def assemble_batches(inputs, crop_mode='center_only'):
   """
   if crop_mode == 'list':
     images_df = _assemble_images_list(inputs)
+
+  elif crop_mode == 'raw':
+    images_df = _assemble_images_raw(inputs)
 
   elif crop_mode == 'center_only':
     images_df = _assemble_images_center_only(inputs)
