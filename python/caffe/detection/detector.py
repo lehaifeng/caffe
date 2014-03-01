@@ -282,6 +282,27 @@ def _assemble_images_selective_search(image_fnames):
   images_df = pd.DataFrame(data)
   return images_df
 
+def process(inputs, crop_mode='center_only', layers=None):
+  """
+  Assemble batches, compute features, and unpack in one convenient step.
+
+  Take
+    inputs: input expected by assemble_batches()
+    crop_mode: modes accepted by assemble_batches
+    layers: names of layers to extract from network
+
+  Give
+    output_df: DataFrame of windows and computed features indexed by filenames.
+  """
+  batches = assemble_batches(inputs, crop_mode)
+
+  feat_dfs = []
+  for batch in batches:
+    feat_dfs.append(compute_feats(batch, layers))
+
+  df = pd.concat(feat_dfs).dropna(subset=['filename'])
+  df.set_index('filename', inplace=True)
+  return df
 
 def assemble_batches(inputs, crop_mode='center_only'):
   """
