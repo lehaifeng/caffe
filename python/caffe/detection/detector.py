@@ -349,17 +349,46 @@ def assemble_batches(inputs, crop_mode='center_only'):
   return df_batches
 
 
-def compute_feats(images_df):
+def compute_feats(images_df, layers=None):
+  """
+  Compute features by the configured network by collecting output and
+  extracting layers.
+
+  Take
+    images_df: pandas DataFrame with 'image' column for input image ndarray
+      feat_func: callback function with CaffeNet arg, which is given the net
+      after the forward pass, and must return a dict of
+      feature_name: feature_data pairs
+    layers: list of net layer names to be extracted
+
+  Give
+    images_df: pandas DataFrame
+               - 'image' column removed
+               + 'feat'  column for output features
+               + 'feat_{layer}' column for every layer
+  """
+  # Prepare i/o blobs how Caffe links: row-major singles in blob dimensions.
   input_blobs = [np.ascontiguousarray(
     np.concatenate(images_df['image'].values), dtype='float32')]
   output_blobs = [np.empty((BATCH_SIZE, NUM_OUTPUT, 1, 1), dtype=np.float32)]
 
+  # Run net forward, delete images and input
   NET.Forward(input_blobs, output_blobs)
-  feats = [output_blobs[0][i].flatten() for i in range(len(output_blobs[0]))]
+  del images_df['image'], input_blobs
 
-  # Add the features and delete the images.
-  del images_df['image']
+  # Collect output
+  feats = [output_blobs[0][i].flatten() for i in range(len(output_blobs[0]))]
   images_df['feat'] = feats
+
+  # Extract layers through blobs
+  if layers:
+    blobs = NET.blobs()
+    blob_names = [b.name for b in blobs]
+    for layer in layers:
+      feat_data = blobs[blob_names.index(layer)].data
+      feat_name = 'feat_{}'.format(layer)
+      images_df[feat_name] = [f for f in feat_data.squeeze()]
+
   return images_df
 
 
