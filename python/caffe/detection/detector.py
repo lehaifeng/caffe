@@ -13,8 +13,10 @@ The selective_search_ijcv_with_python code is available at
   https://github.com/sergeyk/selective_search_ijcv_with_python
 
 TODO:
+- refactor into io, net, and detection classes
+- write main() function for google style
+- integrate R-CNN crop mode
 - batch up image filenames as well: don't want to load all of them into memory
-- refactor into class (without globals)
 - get rid of imagenet mean file and just use mean pixel value
 """
 import numpy as np
