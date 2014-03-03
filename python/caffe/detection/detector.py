@@ -14,6 +14,10 @@ The selective_search_ijcv_with_python code is available at
 
 TODO:
 - refactor into io, net, and detection classes
+- preserve iput order in list + raw modes (output is sorted + grouped by image
+  filename presently as a side effect of batching for throughput)
+- refactor to pandas groupby + apply for efficiency and safety
+- add option to pass through input df (keep all the data together)
 - write main() function for google style
 - integrate R-CNN crop mode
 - batch up image filenames as well: don't want to load all of them into memory
@@ -128,6 +132,7 @@ def _assemble_images_raw(input_df):
       with 'image', 'window', 'filename' columns
   """
   # unpack sequence of (image filename, windows, patches)
+  # N.B. discards input order and sorts + groups on image indices
   image_windows_patches = (
     (ix,
      input_df.iloc[np.where(input_df.index == ix)][COORD_COLS].values,
@@ -162,6 +167,7 @@ def _assemble_images_list(input_df):
       with 'image', 'window', 'filename' columns
   """
   # unpack sequence of (image filename, windows)
+  # N.B. discards input order and sorts + groups on image indices
   image_windows = (
     (ix, input_df.iloc[np.where(input_df.index == ix)][COORD_COLS].values)
     for ix in input_df.index.unique()
