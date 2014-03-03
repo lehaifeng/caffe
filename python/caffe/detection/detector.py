@@ -309,7 +309,7 @@ def process(inputs, crop_mode='center_only', layers=None):
     feat_dfs.append(compute_feats(batch, layers))
 
   df = pd.concat(feat_dfs).dropna(subset=['filename'])
-  df.set_index('filename', inplace=True)
+  df.set_index('filename', inplace=True)  # N.B. discards input order
   return df
 
 def assemble_batches(inputs, crop_mode='center_only'):
@@ -511,7 +511,7 @@ if __name__ == "__main__":
       inputs = [_.strip() for _ in f.readlines()]
   elif args.input_file.lower().endswith('csv'):
     inputs = pd.read_csv(args.input_file, sep=',', dtype={'filename': str})
-    inputs.set_index('filename', inplace=True)
+    inputs.set_index('filename', inplace=True)  # N.B. discards input order
   else:
     raise Exception("Uknown input file type: not in txt or csv")
 
@@ -533,7 +533,7 @@ if __name__ == "__main__":
 
   # Concatenate, droppping the padding rows.
   df = pd.concat(dfs_with_feats).dropna(subset=['filename'])
-  df.set_index('filename', inplace=True)
+  df.set_index('filename', inplace=True)  # N.B. sorts + groups by filename
   print("Processing complete after {:.3f} s.".format(time.time() - t))
 
   # Label coordinates
