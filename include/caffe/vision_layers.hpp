@@ -108,7 +108,7 @@ class ConvolutionLayer : public Layer<Dtype> {
   /// N_ is the spatial dimension of the output, the H x W, which are the last
   /// dimensions of the data and filter matrices.
   int N_;
-  Blob<Dtype> col_buffer_;
+  static Blob<Dtype> col_buffer_;
   Blob<Dtype> bias_multiplier_;
 };
 

@@ -9,6 +9,9 @@
 namespace caffe {
 
 template <typename Dtype>
+Blob<Dtype> ConvolutionLayer<Dtype>::col_buffer_;
+
+template <typename Dtype>
 void ConvolutionLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   // Configure the kernel size, padding, stride, and inputs.
